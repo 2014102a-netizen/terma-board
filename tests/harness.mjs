@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 
-const code = fs.readFileSync(new URL('../apps-script/Code.gs', import.meta.url), 'utf8');
+const code = ['Code.gs', 'Mailer.gs']
+  .map(f => fs.readFileSync(new URL('../apps-script/' + f, import.meta.url), 'utf8')).join('\n');
 
 export const TEST_PASSWORD = 'test-only-password';
 
@@ -31,6 +32,7 @@ export function sampleTables() {
 
 export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now } = {}) {
   const cache = new Map();
+  const mail = [];
   const props = new Map(password ? [['GROUP_PASSWORD', password]] : []);
   const clock = { now: now ?? Date.now() };
   class FakeDate extends Date {
@@ -42,7 +44,7 @@ export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now }
   } : null;
   const context = vm.createContext({
     Date: FakeDate, JSON, Number, String, Boolean, Error, Math, Object,
-    SpreadsheetApp: { openById: () => ({ getSheetByName: sheetApi }) },
+    SpreadsheetApp: { openById: () => ({ getSheetByName: sheetApi }), getUi: () => { throw new Error('no ui'); } },
     CacheService: { getScriptCache: () => ({ get: k => cache.get(k) ?? null, put: (k, v) => cache.set(k, v), remove: k => cache.delete(k) }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) ?? null }) },
     Utilities: {
@@ -54,8 +56,10 @@ export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now }
     },
     ContentService: { MimeType: { JSON: 'application/json' }, createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }) },
     Logger: { log: () => {} },
+    MailApp: { sendEmail: o => mail.push(o) },
+    Session: { getEffectiveUser: () => ({ getEmail: () => 'owner@example.org' }) },
   });
   vm.runInContext(code, context);
   const post = value => context.doPost({ postData: { contents: JSON.stringify(value) } });
-  return { context, post, tables, props, cache, clock };
+  return { context, post, tables, props, cache, clock, mail };
 }
