@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 
-const code = ['Code.gs', 'Mailer.gs']
+const code = ['Code.gs', 'Mailer.gs', 'Bot.gs']
   .map(f => fs.readFileSync(new URL('../apps-script/' + f, import.meta.url), 'utf8')).join('\n');
 
 export const TEST_PASSWORD = 'test-only-password';
@@ -33,6 +33,7 @@ export function sampleTables() {
 export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now } = {}) {
   const cache = new Map();
   const mail = [];
+  const telegram = { sent: [], updates: [], triggers: [] };
   const props = new Map(password ? [['GROUP_PASSWORD', password]] : []);
   const clock = { now: now ?? Date.now() };
   class FakeDate extends Date {
@@ -46,7 +47,24 @@ export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now }
     Date: FakeDate, JSON, Number, String, Boolean, Error, Math, Object,
     SpreadsheetApp: { openById: () => ({ getSheetByName: sheetApi }), getUi: () => { throw new Error('no ui'); } },
     CacheService: { getScriptCache: () => ({ get: k => cache.get(k) ?? null, put: (k, v) => cache.set(k, v), remove: k => cache.delete(k) }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) ?? null }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }) },
+    UrlFetchApp: { fetch: (url, opts) => {
+      const method = url.split('/').pop();
+      const body = JSON.parse(opts.payload);
+      let result = true;
+      if (method === 'sendMessage') telegram.sent.push(body);
+      if (method === 'getUpdates') result = telegram.updates;
+      return { getContentText: () => JSON.stringify({ ok: true, result }) };
+    } },
+    ScriptApp: {
+      WeekDay: { MONDAY: 'MONDAY', FRIDAY: 'FRIDAY' },
+      getProjectTriggers: () => telegram.triggers.map(t => ({ getHandlerFunction: () => t.fn, _t: t })),
+      deleteTrigger: t => { telegram.triggers.splice(telegram.triggers.indexOf(t._t), 1); },
+      newTrigger: fn => { const t = { fn }; const b = {
+        timeBased: () => b, onWeekDay: d => { t.day = d; return b; }, everyDays: n => { t.every = n; return b; },
+        atHour: h => { t.hour = h; return b; }, inTimezone: z => { t.tz = z; return b; },
+        create: () => { telegram.triggers.push(t); return t; } }; return b; },
+    },
     Utilities: {
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
       computeDigest: (_, v) => [...crypto.createHash('sha256').update(v).digest()].map(b => (b > 127 ? b - 256 : b)),
@@ -61,5 +79,5 @@ export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now }
   });
   vm.runInContext(code, context);
   const post = value => context.doPost({ postData: { contents: JSON.stringify(value) } });
-  return { context, post, tables, props, cache, clock, mail };
+  return { context, post, tables, props, cache, clock, mail, telegram };
 }
