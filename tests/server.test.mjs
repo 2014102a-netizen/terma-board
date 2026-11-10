@@ -69,10 +69,10 @@ test('смена пароля закрывает старые входы', () =>
   assert.equal(env.post({ action: 'board', token }).error, 'expired_session');
 });
 
-test('вход живёт 14 дней', () => {
+test('вход живёт 90 дней', () => {
   const env = setup();
   const { token } = login(env.post);
-  env.clock.now += 13 * 86400000;
+  env.clock.now += 89 * 86400000;
   env.cache.clear();
   assert.equal(env.post({ action: 'board', token }).ok, true);
   env.clock.now += 2 * 86400000;

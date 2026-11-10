@@ -7,7 +7,7 @@
 - React 19 + Vite, без CSS-фреймворка, стили в `src/index.css` через CSS-переменные.
 - Сборка в `docs/` (`npm run pages`), GitHub Pages: `main` → `/docs`.
 - Данные: Google Таблица `1W2cPtOLtnWWpU8ivv61oOKSDgyiJYjVjkG_Gj8yGVCc`, вкладки «Задачи», «Решения», «Открытые вопросы», «Участники».
-- Сервер: `apps-script/Code.gs`, только чтение. Колонки ищутся по заголовкам (`TABS`). Вход по `GROUP_PASSWORD` из свойств скрипта, токен = срок + HMAC, 14 дней. Смена пароля обнуляет входы.
+- Сервер: `apps-script/Code.gs`, только чтение. Колонки ищутся по заголовкам (`TABS`). Вход по `GROUP_PASSWORD` из свойств скрипта, токен = срок + HMAC, 90 дней. Смена пароля обнуляет входы.
 - Почта: `apps-script/Mailer.gs` (previewDigest / sendDigest), читает колонку «Почта» только для отправки, наружу её не отдаёт. Покрыт `tests/mailer.test.mjs`.
 - Логика доски без React: `src/lib/board.js` (даты, статусы, зависимости, группировки) — покрыта `tests/board.test.mjs`.
 

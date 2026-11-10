@@ -144,7 +144,7 @@ function Login({ onLogin, error: outerError, pending }) {
           {(error || outerError) && <p className="error" role="alert">{error || outerError}</p>}
         </form>
       )}
-      <p className="muted small">Пароль выдаёт Андрей. Вход сохраняется на этом устройстве на 14 дней.</p>
+      <p className="muted small">Пароль выдаёт Андрей. Вход сохраняется на этом устройстве на 3 месяца.</p>
     </div>
   );
 }

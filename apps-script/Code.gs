@@ -9,7 +9,7 @@
  * Колонки «Контакт» и «Почта» наружу не отдаются никогда.
  */
 var SPREADSHEET_ID = '1W2cPtOLtnWWpU8ivv61oOKSDgyiJYjVjkG_Gj8yGVCc';
-var SESSION_DAYS = 14;
+var SESSION_DAYS = 90;
 var CACHE_SECONDS = 30;
 var MAX_FAILS_CLIENT = 8;
 var MAX_FAILS_GLOBAL = 40;
