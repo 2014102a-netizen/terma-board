@@ -309,6 +309,12 @@ function People({ board, name, onShow }) {
           <a href="#/people" className="back">← Все люди</a>
           <h2 className="person-name">{p.name}</h2>
           <p className="muted">{[p.role || p.side, p.area].filter(Boolean).join(' · ')}</p>
+          {(p.telegram || p.phone) && (
+            <div className="contacts">
+              {p.telegram && <a className="contact" href={p.telegram.href} target="_blank" rel="noreferrer">Написать в Telegram<span>{p.telegram.text}</span></a>}
+              {p.phone && <a className="contact" href={p.phone.href}>Позвонить<span>{p.phone.text}</span></a>}
+            </div>
+          )}
           <button className={`ghost ${isMine ? 'on' : ''}`} onClick={() => { const v = isMine ? null : p.name; personStore.set(v); setMine(v); }}>
             {isMine ? 'Это я ✓' : 'Это я — открывать первым'}
           </button>

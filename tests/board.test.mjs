@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isoDate, nextMeeting, parseDeps, statusKind, buildBoard, weekSections, peopleIndex, blockers, sameName, moscowToday, pluralTasks } from '../src/lib/board.js';
+import { phoneLink, telegramLink, isoDate, nextMeeting, parseDeps, statusKind, buildBoard, weekSections, peopleIndex, blockers, sameName, moscowToday, pluralTasks } from '../src/lib/board.js';
 
 test('даты из таблицы', () => {
   assert.equal(isoDate('02.11.2026'), '2026-11-02');
@@ -107,4 +107,27 @@ test('склонения', () => {
   assert.equal(pluralTasks(3), '3 задачи');
   assert.equal(pluralTasks(11), '11 задач');
   assert.equal(pluralTasks(22), '22 задачи');
+});
+
+test('телефон и Telegram превращаются в ссылки', () => {
+  assert.deepEqual(phoneLink('79312381740'), { href: 'tel:+79312381740', text: '+7 931 238-17-40' });
+  assert.equal(phoneLink('8-931-238-17-40').href, 'tel:+79312381740');
+  assert.equal(phoneLink('Имя уточнить'), null);
+  assert.equal(phoneLink(''), null);
+  assert.deepEqual(telegramLink('@Piven80'), { href: 'https://t.me/Piven80', text: '@Piven80' });
+  assert.equal(telegramLink('Piven80').href, 'https://t.me/Piven80');
+  assert.equal(telegramLink('нет'), null);
+});
+
+test('участник без задач виден в списке людей, с контактами', () => {
+  const board = buildBoard({ ...raw, people: [
+    ...raw.people,
+    { name: 'Аркадий Петрович', side: 'Консультант', area: 'Котельная', phone: '79990001122', telegram: '@arkady_p' },
+  ] }, '2026-11-08');
+  const people = peopleIndex(board);
+  const arkady = people.find(p => p.name === 'Аркадий Петрович');
+  assert.ok(arkady);
+  assert.equal(arkady.open, 0);
+  assert.equal(arkady.telegram.href, 'https://t.me/arkady_p');
+  assert.equal(people.filter(p => p.name.startsWith('Ольга')).length, 1, 'Ольга из задач и «Ольга Николаевна» — один человек');
 });

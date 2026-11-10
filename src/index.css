@@ -119,6 +119,12 @@ button:disabled { opacity: .5; cursor: default; }
 .ghost { border: 1px solid var(--line); padding: 8px 12px; border-radius: 99px; font-size: 13px; margin-top: 10px; min-height: 36px; }
 .ghost.on { background: var(--accent); color: var(--paper); border-color: var(--accent); }
 
+/* Контакты */
+.contacts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.contact { display: flex; flex-direction: column; justify-content: center; min-height: 52px; padding: 8px 12px; background: var(--accent); color: var(--paper); text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 8px; }
+.contact span { font-weight: 400; font-size: 12.5px; opacity: .85; margin-top: 2px; }
+.contact:only-child { grid-column: 1 / -1; }
+
 /* Кто кого ждёт */
 .chain-row { margin-bottom: 18px; }
 .chain-row .task { margin-bottom: 0; }

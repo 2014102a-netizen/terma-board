@@ -56,7 +56,6 @@ test('в письмах нет чужих телефонов и почт', () =>
   env.context.sendDigest();
   for (const m of env.mail) {
     assert.ok(!m.body.includes('79990000000'));
-    assert.ok(!m.body.includes('@ivan'));
     for (const other of ['ivan@example.org', 'petr@example.org', 'anna@example.org']) {
       if (other !== m.to) assert.ok(!m.body.includes(other), `${other} в письме для ${m.to}`);
     }
@@ -83,9 +82,8 @@ test('обращение по имени и отчеству', () => {
   assert.equal(env.context.greetingName_('Андрей Ефремов'), 'Андрей');
 });
 
-test('веб-доска по-прежнему не отдаёт почты', () => {
+test('веб-доска не отдаёт почты (Telegram и телефон — можно)', () => {
   const env = setup({ tables: tables(), now: NOW });
   const res = env.post({ action: 'login', password: 'test-only-password', clientId: 'x' });
   assert.ok(!JSON.stringify(res.board).includes('@example.org'));
-  assert.ok(!JSON.stringify(res.board).includes('@ivan'));
 });

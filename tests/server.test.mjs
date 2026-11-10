@@ -46,12 +46,14 @@ test('даты-объекты приводятся к ISO, номера к ст�
   assert.equal(board.tasks[1].due, '09.11.2026');
 });
 
-test('контакты и почта не выходят наружу', () => {
-  const { board } = login(setup().post);
+test('почта не выходит наружу, телефон и Telegram — только после входа', () => {
+  const { post } = setup();
+  const { board } = login(post);
   const text = JSON.stringify(board);
-  assert.ok(!text.includes('79990000000'));
   assert.ok(!text.includes('ivan@example.org'));
-  assert.deepEqual(Object.keys(board.people[0]).sort(), ['area', 'name', 'row', 'side']);
+  assert.deepEqual(Object.keys(board.people[0]).sort(), ['area', 'name', 'phone', 'row', 'side', 'telegram']);
+  assert.equal(board.people[0].phone, '79990000000');
+  assert.ok(!JSON.stringify(post({ action: 'board' })).includes('7999'));
 });
 
 test('подделанный токен отклоняется', () => {

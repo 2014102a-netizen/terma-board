@@ -150,6 +150,11 @@ export function peopleIndex(board) {
     if (!map.has(name)) map.set(name, { name, role: t.role, tasks: [] });
     map.get(name).tasks.push(t);
   });
+  // Участники без задач тоже видны: к ним можно зайти за контактом.
+  board.people.forEach(person => {
+    const known = [...map.keys()].some(n => sameName(n, person.name));
+    if (!known && person.name) map.set(person.name, { name: person.name, role: '', tasks: [] });
+  });
   return [...map.values()].map(p => {
     const info = board.people.find(x => sameName(x.name, p.name));
     const open = p.tasks.filter(t => t.open);
@@ -157,6 +162,8 @@ export function peopleIndex(board) {
       ...p,
       side: info?.side || '',
       area: info?.area || '',
+      phone: phoneLink(info?.phone),
+      telegram: telegramLink(info?.telegram),
       open: open.length,
       late: open.filter(t => t.late).length,
       blocking: open.filter(t => t.waitedBy.length).length,
@@ -209,4 +216,19 @@ export function pluralDays(n) {
   if (a === 1 && b !== 11) return `${n} день`;
   if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return `${n} дня`;
   return `${n} дней`;
+}
+
+// «79312381740», «8 931 238-17-40» → tel:+79312381740 и «+7 931 238-17-40». Не номер — null.
+export function phoneLink(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.length === 10) d = '7' + d;
+  if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
+  if (d.length !== 11 || d[0] !== '7') return null;
+  return { href: `tel:+${d}`, text: `+7 ${d.slice(1, 4)} ${d.slice(4, 7)}-${d.slice(7, 9)}-${d.slice(9)}` };
+}
+
+// «@Piven80» или «Piven80» → https://t.me/Piven80. Не ник — null.
+export function telegramLink(raw) {
+  const m = String(raw || '').trim().match(/^@?([A-Za-z][A-Za-z0-9_]{3,31})$/);
+  return m ? { href: `https://t.me/${m[1]}`, text: `@${m[1]}` } : null;
 }
