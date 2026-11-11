@@ -28,6 +28,8 @@ export default function App() {
   const [route, setRoute] = useState(readRoute);
   const [meeting, setMeeting] = useState('');
   const [openTask, setOpenTask] = useState(null);
+  const [me, setMe] = useState(() => personStore.get());
+  const pickMe = useCallback(name => { personStore.set(name); setMe(name); }, []);
 
   const accept = useCallback(board => {
     const now = new Date().toISOString();
@@ -44,13 +46,13 @@ export default function App() {
     if (!token?.token) return;
     setLoading(true);
     try {
-      const data = await request({ action: 'board', token: token.token });
+      const data = await request({ action: 'board', token: token.token, who: me || '', clientId: clientId() });
       accept(data.board);
     } catch (e) {
       if (e.code === 'expired_session') { logout(); setError(e.message); }
       else { setStale(true); setError(e.message); }
     } finally { setLoading(false); }
-  }, [token, accept, logout]);
+  }, [token, accept, logout, me]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
@@ -74,6 +76,11 @@ export default function App() {
       const t = { token: data.token, expiresAt: data.expiresAt };
       tokenStore.set(t); setToken(t); accept(data.board);
     }} />;
+  }
+
+  const participants = (raw.people || []).filter(p => p.name);
+  if (participants.length && !participants.some(p => p.name === me)) {
+    return <WhoAreYou people={participants} onPick={pickMe} />;
   }
 
   const show = task => setOpenTask(full.tasks.find(t => t.id === task.id) || task);
@@ -103,13 +110,14 @@ export default function App() {
       )}
       <main>
         {route.tab === 'week' && <Week board={board} onShow={show} />}
-        {route.tab === 'people' && <People board={board} name={route.param} onShow={show} />}
+        {route.tab === 'people' && <People board={board} name={route.param} onShow={show} me={me} />}
         {route.tab === 'links' && <Links board={board} onShow={show} />}
         {route.tab === 'decisions' && <Decisions board={board} />}
         {route.tab === 'questions' && <Questions board={board} />}
       </main>
       <footer className="footer">
-        Данные из таблицы рабочей группы{full.generatedAt ? `, обновлено ${new Date(full.generatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : ''}. Ошибка или изменение — напишите Андрею.
+        {me && <>Вы: {me} · <button className="link" onClick={() => pickMe(null)}>сменить</button><br /></>}
+        Доска отмечает, кто её открывал. Данные из таблицы рабочей группы{full.generatedAt ? `, обновлено ${new Date(full.generatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : ''}. Ошибка или изменение — напишите Андрею.
       </footer>
       <TaskSheet task={openTask} onClose={() => setOpenTask(null)} onShow={show} />
     </div>
@@ -145,6 +153,23 @@ function Login({ onLogin, error: outerError, pending }) {
         </form>
       )}
       <p className="muted small">Пароль выдаёт Андрей. Вход сохраняется на этом устройстве на 3 месяца.</p>
+    </div>
+  );
+}
+
+function WhoAreYou({ people, onPick }) {
+  return (
+    <div className="login who">
+      <div className="wordmark big"><Mark /> ТЕРМА</div>
+      <h1>Кто вы?</h1>
+      <p className="lead">Один раз на этом телефоне. Доска откроет ваши задачи первыми и отметит, что вы её смотрели.</p>
+      <div className="who-list">
+        {people.map(p => (
+          <button key={p.name} className="who-item" onClick={() => onPick(p.name)}>
+            <b>{p.name}</b>{p.side && <span>{p.side}</span>}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -293,16 +318,16 @@ function Week({ board, onShow }) {
   );
 }
 
-function People({ board, name, onShow }) {
+function People({ board, name, onShow, me }) {
   const people = peopleIndex(board);
-  const [mine, setMine] = useState(() => personStore.get());
+  const mine = me;
   if (name) {
     const p = people.find(x => x.name === name);
     if (!p) return <p className="muted">Нет задач у «{name}» в выбранном периоде. <a href="#/people">Все люди</a></p>;
     const open = p.tasks.filter(t => t.open).sort((a, b) => (b.late - a.late) || (a.due || '9').localeCompare(b.due || '9'));
     const waitsFor = [...new Set(open.flatMap(t => t.waitingFor))].filter(d => d.person !== p.name);
     const waitedBy = [...new Set(open.flatMap(t => t.waitedBy))].filter(w => w.person !== p.name);
-    const isMine = mine === p.name;
+    const isMine = sameName(p.name, mine || '') || sameName(mine || '', p.name);
     return (
       <>
         <div className="person-head">
@@ -315,9 +340,7 @@ function People({ board, name, onShow }) {
               {p.phone && <a className="contact" href={p.phone.href}>Позвонить<span>{p.phone.text}</span></a>}
             </div>
           )}
-          <button className={`ghost ${isMine ? 'on' : ''}`} onClick={() => { const v = isMine ? null : p.name; personStore.set(v); setMine(v); }}>
-            {isMine ? 'Это я ✓' : 'Это я — открывать первым'}
-          </button>
+          {isMine && <p className="me-note">Это вы</p>}
         </div>
         <Section title="Обещания" items={open} onShow={onShow} empty="Открытых задач нет." />
         <Section title="Нужно от других" items={waitsFor} onShow={onShow} note="Без этих задач свои не закрыть." />
@@ -342,7 +365,7 @@ function People({ board, name, onShow }) {
       {sorted.map(p => (
         <li key={p.name}>
           <a href={`#/people/${encodeURIComponent(p.name)}`}>
-            <span className="p-name">{p.name}{mine === p.name && <em> · я</em>}</span>
+            <span className="p-name">{p.name}{mine && (sameName(p.name, mine) || sameName(mine, p.name)) && <em> · я</em>}</span>
             <span className="p-role">{p.role || p.side}</span>
             <span className="p-stats">
               {p.late > 0 && <span className="badge late">{p.late} просроч.</span>}

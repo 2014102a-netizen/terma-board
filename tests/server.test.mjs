@@ -107,3 +107,32 @@ test('нет вкладки — пустой список, а не ошибка'
   assert.equal(res.ok, true);
   assert.deepEqual(res.board.questions, []);
 });
+
+test('журнал: пишет известное имя, не чаще раза в час, неизвестное — нет', () => {
+  const env = setup({ now: Date.parse('2026-11-11T06:40:00Z') });
+  const { token } = login(env.post);
+  env.post({ action: 'board', token, who: 'Иван', clientId: 'phone-1' });
+  env.post({ action: 'board', token, who: 'Иван', clientId: 'phone-1' });
+  env.post({ action: 'board', token, who: 'Чужой', clientId: 'phone-2' });
+  env.post({ action: 'board', token, clientId: 'phone-3' });
+  const log = env.tables['Журнал'];
+  assert.deepEqual(log[0], ['Время', 'Кто', 'Устройство']);
+  assert.equal(log.length, 2);
+  assert.equal(log[1][0], '2026-11-11 09:40');
+  assert.equal(log[1][1], 'Иван');
+  assert.match(log[1][2], /^[0-9a-f]{6}$/);
+  assert.ok(env.tables.__hidden.includes('Журнал'));
+  env.cache.clear();
+  env.post({ action: 'board', token, who: 'Иван', clientId: 'phone-1' });
+  assert.equal(log.length, 3, 'через час — снова пишет');
+});
+
+test('журнал не открывается без входа и не ломает доску', () => {
+  const env = setup();
+  env.post({ action: 'board', token: 'bad', who: 'Иван', clientId: 'x' });
+  assert.equal(env.tables['Журнал'], undefined);
+  const { token } = login(env.post);
+  env.context.SpreadsheetApp.openById = () => { throw new Error('boom'); };
+  env.cache.set('board', JSON.stringify({ tasks: [], decisions: [], questions: [], people: [{ name: 'Иван' }] }));
+  assert.equal(env.post({ action: 'board', token, who: 'Иван', clientId: 'y' }).ok, true);
+});

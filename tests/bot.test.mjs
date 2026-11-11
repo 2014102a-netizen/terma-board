@@ -139,5 +139,40 @@ test('длинное сообщение режется на части по ст
 test('testBot присылает пробу и три сообщения', () => {
   const e = env('2026-11-10T20:00:00Z');
   e.context.testBot();
-  assert.equal(e.telegram.sent.length, 4);
+  e.props.set('TELEGRAM_OWNER_CHAT_ID', '777');
+  e.context.testBot();
+  assert.equal(e.telegram.sent.length, 4 + 5);
+});
+
+test('сводка активности: только владельцу, дни за неделю, кто не открывал', () => {
+  const e = env('2026-11-16T06:00:00Z');
+  e.props.set('TELEGRAM_OWNER_CHAT_ID', '777');
+  e.tables['Журнал'] = [['Время', 'Кто', 'Устройство'],
+    ['2026-11-10 09:00', 'Иван (Иван Сидоров)', 'a'], ['2026-11-10 18:00', 'Иван (Иван Сидоров)', 'a'],
+    ['2026-11-12 09:00', 'Иван (Иван Сидоров)', 'a'], ['2026-11-13 10:00', 'Ольга', 'b'],
+    ['2026-11-01 10:00', 'Пётр', 'c'], ['2026-11-16 08:00', 'Пётр', 'c']];
+  e.context.botMonday();
+  assert.equal(e.telegram.sent.length, 2);
+  assert.equal(e.telegram.sent[0].chat_id, '42');
+  const report = e.telegram.sent[1];
+  assert.equal(report.chat_id, '777');
+  assert.match(report.text, /^Доска за неделю, 09\.11–15\.11/);
+  assert.match(report.text, /— Иван \(Иван Сидоров\) — 2 дня\n— Ольга — 1 день/);
+  assert.match(report.text, /не открывали: Пётр/);
+});
+
+test('без личного чата владельца сводка не уходит никуда', () => {
+  const e = env('2026-11-16T06:00:00Z');
+  e.context.botMonday();
+  assert.equal(e.telegram.sent.length, 1);
+});
+
+test('connectMe запоминает владельца, connectGroup его не трогает', () => {
+  const e = env('2026-11-10T20:00:00Z', { chat: false });
+  e.telegram.updates.push({ message: { chat: { id: 777, type: 'private' }, text: '/start' } });
+  e.telegram.updates.push({ message: { chat: { id: -100, type: 'group', title: 'Г' }, text: 'x' } });
+  e.context.connectMe();
+  e.context.connectGroup();
+  assert.equal(e.props.get('TELEGRAM_OWNER_CHAT_ID'), '777');
+  assert.equal(e.props.get('TELEGRAM_CHAT_ID'), '-100');
 });

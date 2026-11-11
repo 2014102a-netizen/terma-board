@@ -152,6 +152,16 @@ button:disabled { opacity: .5; cursor: default; }
 .sheet-close { position: absolute; right: 6px; top: 4px; width: 44px; height: 44px; font-size: 28px; line-height: 1; color: var(--muted); }
 @media (min-width: 600px) { .sheet { margin: auto; } .sheet-body { border-radius: 14px; } }
 
+/* Кто вы */
+.login.who { padding-top: 8vh; }
+.who-list { display: grid; gap: 8px; }
+.who-item { text-align: left; background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; min-height: 56px; display: flex; flex-direction: column; gap: 2px; border-radius: 8px; }
+.who-item b { font-weight: 600; }
+.who-item span { font-size: 13px; color: var(--muted); }
+.who-item:active { border-color: var(--accent); }
+.me-note { display: inline-block; margin-top: 10px; font-size: 13px; color: var(--accent); }
+.link { color: var(--accent); text-decoration: underline; padding: 0; font-size: inherit; }
+
 /* Вход */
 .login { max-width: 420px; margin: 0 auto; padding: 18vh 22px 40px; }
 .wordmark.big { font-size: 17px; }

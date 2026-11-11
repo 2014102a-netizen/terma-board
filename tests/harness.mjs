@@ -42,10 +42,16 @@ export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now }
   }
   const sheetApi = name => tables[name] ? {
     getDataRange: () => ({ getValues: () => tables[name].map(r => [...r]) }),
+    appendRow: row => { tables[name].push([...row]); },
+    hideSheet: () => { (tables.__hidden ||= []).push(name); },
   } : null;
+  const book = {
+    getSheetByName: sheetApi,
+    insertSheet: name => { tables[name] = []; return sheetApi(name); },
+  };
   const context = vm.createContext({
     Date: FakeDate, JSON, Number, String, Boolean, Error, Math, Object,
-    SpreadsheetApp: { openById: () => ({ getSheetByName: sheetApi }), getUi: () => { throw new Error('no ui'); } },
+    SpreadsheetApp: { openById: () => book, getUi: () => { throw new Error('no ui'); } },
     CacheService: { getScriptCache: () => ({ get: k => cache.get(k) ?? null, put: (k, v) => cache.set(k, v), remove: k => cache.delete(k) }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }) },
     UrlFetchApp: { fetch: (url, opts) => {
@@ -70,7 +76,7 @@ export function setup({ tables = sampleTables(), password = TEST_PASSWORD, now }
       computeDigest: (_, v) => [...crypto.createHash('sha256').update(v).digest()].map(b => (b > 127 ? b - 256 : b)),
       computeHmacSha256Signature: (v, key) => [...crypto.createHmac('sha256', key).update(v).digest()].map(b => (b > 127 ? b - 256 : b)),
       base64EncodeWebSafe: bytes => Buffer.from(bytes.map(b => b & 255)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
-      formatDate: (d, tz, pattern) => new Date(d.getTime() + 10800000).toISOString().slice(0, 10),
+      formatDate: (d, tz, pattern) => { const iso = new Date(d.getTime() + 10800000).toISOString(); return pattern.includes('HH') ? iso.slice(0, 10) + ' ' + iso.slice(11, 16) : iso.slice(0, 10); },
     },
     ContentService: { MimeType: { JSON: 'application/json' }, createTextOutput: text => ({ setMimeType: () => JSON.parse(text) }) },
     Logger: { log: () => {} },

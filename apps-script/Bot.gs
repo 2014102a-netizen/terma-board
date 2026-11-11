@@ -2,7 +2,9 @@
  *
  * Свойства скрипта:
  *   TELEGRAM_TOKEN    — токен от @BotFather (кладёт владелец, в коде его нет);
- *   TELEGRAM_CHAT_ID  — куда писать; задаётся функциями connectMe() или connectGroup().
+ *   TELEGRAM_CHAT_ID  — куда писать напоминания; задаётся connectMe() или connectGroup().
+ *   TELEGRAM_OWNER_CHAT_ID — личный чат владельца; задаётся connectMe(). Туда, и только туда,
+ *                            по понедельникам уходит сводка «кто открывал доску».
  *
  * Порядок запуска:
  *   1. Написать боту /start → выполнить connectMe(): бот запомнит личный чат владельца.
@@ -19,7 +21,11 @@ var BOT_TZ = 'Europe/Moscow';
 
 /* ---------- Подключение и расписание ---------- */
 
-function connectMe() { return connectChat_(['private'], 'Бот подключён. Напоминания по задачам будут приходить сюда.'); }
+function connectMe() {
+  var id = connectChat_(['private'], 'Бот подключён. Напоминания по задачам будут приходить сюда.');
+  PropertiesService.getScriptProperties().setProperty('TELEGRAM_OWNER_CHAT_ID', String(id));
+  return id;
+}
 function connectGroup() { return connectChat_(['group', 'supergroup'], 'Бот подключён к группе. Здесь будут напоминания по задачам рабочей группы.'); }
 
 function connectChat_(types, hello) {
@@ -58,12 +64,17 @@ function testBot() {
   sendTelegram_(fridayText_(data.tasks, data.people, data.today));
   sendTelegram_(mondayText_(data.tasks, data.people, data.questions, data.today));
   sendTelegram_(dailyText_(data.tasks, data.people, data.today) || 'Ежедневное: сегодня сроков нет — в такой день бот молчит.');
+  sendOwner_(activityText_(data.visits, data.tasks, data.today));
 }
 
 /* ---------- Запуск по расписанию ---------- */
 
 function botFriday() { var d = botData_(); sendTelegram_(fridayText_(d.tasks, d.people, d.today)); }
-function botMonday() { var d = botData_(); sendTelegram_(mondayText_(d.tasks, d.people, d.questions, d.today)); }
+function botMonday() {
+  var d = botData_();
+  sendTelegram_(mondayText_(d.tasks, d.people, d.questions, d.today));
+  try { sendOwner_(activityText_(d.visits, d.tasks, d.today)); } catch (error) { Logger.log(error); }
+}
 
 function botDaily() {
   var d = botData_();
@@ -82,6 +93,7 @@ function botData_() {
     tasks: readTab_(book, { sheet: TABS.tasks.sheet, fields: taskFields }),
     people: readTab_(book, { sheet: TABS.people.sheet, fields: { name: 'Участник', telegram: 'Telegram' } }),
     questions: readTab_(book, TABS.questions),
+    visits: readTab_(book, { sheet: 'Журнал', fields: { time: 'Время', who: 'Кто' } }),
     today: Utilities.formatDate(new Date(), BOT_TZ, 'yyyy-MM-dd')
   };
 }
@@ -149,6 +161,41 @@ function dailyText_(rawTasks, people, today) {
   botBlock_(lines, 'Вчера прошёл срок', missed, fmt);
   lines.push('', 'Сделано — ответьте «№… — готово». Не успеваете — «№… переношу на …».');
   return lines.join('\n');
+}
+
+// Только владельцу: кто открывал доску за 7 дней до сегодняшнего. «Ни разу» — у кого есть открытые задачи.
+function activityText_(visits, rawTasks, today) {
+  var from = new Date(Date.parse(today + 'T00:00:00Z') - 7 * 86400000).toISOString().slice(0, 10);
+  var days = {};
+  (visits || []).forEach(function(v) {
+    var day = botIso_(v.time);
+    if (!v.who || !day || day < from || day >= today) return;
+    days[v.who] = days[v.who] || {};
+    days[v.who][day] = true;
+  });
+  var seen = Object.keys(days).map(function(name) { return { name: name, n: Object.keys(days[name]).length }; })
+    .sort(function(a, b) { return b.n - a.n || a.name.localeCompare(b.name); });
+  var owners = [];
+  botTasks_(rawTasks).forEach(function(t) {
+    if (t.open && t.person && !botGeneric_(t.person) && owners.indexOf(t.person) < 0) owners.push(t.person);
+  });
+  var base = function(n) { return norm_(String(n || '').replace(/\(.*\)/, '')); };
+  var never = owners.filter(function(person) {
+    var t = norm_(person);
+    return !seen.some(function(s) { var b = base(s.name); return b === t || b.indexOf(t + ' ') === 0; });
+  });
+  var lines = ['Доска за неделю, ' + botShort_(from) + '–' + botShort_(new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10))];
+  if (seen.length) {
+    lines.push('', 'Открывали:');
+    seen.forEach(function(s) { lines.push('— ' + s.name + ' — ' + s.n + ' ' + (s.n === 1 ? 'день' : s.n < 5 ? 'дня' : 'дней')); });
+  } else lines.push('', 'Никто не открывал.');
+  if (never.length) lines.push('', 'С открытыми задачами, но не открывали: ' + never.join(', '));
+  return lines.join('\n');
+}
+
+function sendOwner_(text) {
+  var owner = PropertiesService.getScriptProperties().getProperty('TELEGRAM_OWNER_CHAT_ID');
+  if (owner) sendTelegramTo_(owner, text);
 }
 
 /* ---------- Помощники ---------- */
@@ -241,6 +288,10 @@ function botWeekday_(iso) {
 function sendTelegram_(text) {
   var chatId = PropertiesService.getScriptProperties().getProperty('TELEGRAM_CHAT_ID');
   if (!chatId) throw new Error('Чат не подключён: запустите connectMe() или connectGroup().');
+  sendTelegramTo_(chatId, text);
+}
+
+function sendTelegramTo_(chatId, text) {
   botChunks_(text, 3900).forEach(function(part) {
     botApi_('sendMessage', { chat_id: chatId, text: part, disable_web_page_preview: true });
   });

@@ -4,7 +4,8 @@
  * В коде, на сайте и в репозитории паролей и данных нет.
  * Смена пароля сразу закрывает все выданные входы.
  *
- * Только чтение: скрипт ничего не пишет в таблицу.
+ * Таблицу скрипт только читает. Единственная запись — строка во вкладку «Журнал»
+ * (скрытая): кто и когда открывал доску, не чаще раза в час с одного телефона.
  * Колонки ищутся по заголовкам, порядок колонок можно менять.
  * После входа отдаются телефон («Контакт») и Telegram участников — для кнопок связи на доске.
  * Колонка «Почта» наружу не отдаётся никогда: она нужна только рассылке (Mailer.gs).
@@ -14,6 +15,7 @@ var SESSION_DAYS = 90;
 var CACHE_SECONDS = 30;
 var MAX_FAILS_CLIENT = 8;
 var MAX_FAILS_GLOBAL = 40;
+var LOG_SHEET = 'Журнал';
 
 var TABS = {
   tasks: { sheet: 'Задачи', fields: {
@@ -40,7 +42,9 @@ function doPost(e) {
     if (req.action === 'login') return json_(login_(req));
     if (req.action === 'board') {
       if (!verifyToken_(req.token)) return json_({ ok: false, error: 'expired_session' });
-      return json_({ ok: true, board: board_() });
+      var board = board_();
+      logVisit_(req, board);
+      return json_({ ok: true, board: board });
     }
     return json_({ ok: false, error: 'invalid_action' });
   } catch (error) {
@@ -144,6 +148,30 @@ function readTab_(book, tab) {
     if (filled) { item.row = r + 1; rows.push(item); }
   }
   return rows;
+}
+
+/* ---------- Журнал открытий ---------- */
+
+// Пишет «время · кто · устройство». Имя принимается, только если оно есть во вкладке «Участники».
+// Сбой журнала никогда не мешает доске открыться.
+function logVisit_(req, board) {
+  try {
+    var who = String(req.who || '').trim();
+    if (!who || !board.people.some(function(p) { return p.name === who; })) return;
+    var device = hash_(String(req.clientId || 'anonymous').slice(0, 100)).slice(0, 6);
+    var cache = CacheService.getScriptCache();
+    var key = 'seen:' + device + ':' + hash_(who).slice(0, 8);
+    if (cache.get(key)) return;
+    cache.put(key, '1', 3600);
+    var book = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = book.getSheetByName(LOG_SHEET);
+    if (!sheet) {
+      sheet = book.insertSheet(LOG_SHEET);
+      sheet.appendRow(['Время', 'Кто', 'Устройство']);
+      sheet.hideSheet();
+    }
+    sheet.appendRow([Utilities.formatDate(new Date(), 'Europe/Moscow', 'yyyy-MM-dd HH:mm'), who, device]);
+  } catch (error) { /* журнал не критичен */ }
 }
 
 function json_(value) {
